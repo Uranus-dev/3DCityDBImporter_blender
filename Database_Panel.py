@@ -72,18 +72,20 @@ def geojsonParser(rows):
         edges = []
         face = []
         faces = []
-        geometry = json.loads(row['geometry'])
-        id = row['gmlid']
-        if geometry['type'] == "Polygon":
-            for array in geometry['coordinates']:
-                for point in array:
-                    vertices.append(tuple(point))
-            # delete the repeating coordinates
-            vertices.pop(len(vertices)-1)
-            # append vertices tuple in faces
-            for i in range(int(len(vertices))):
-                face.append(i)
-            faces.append(tuple(face))
+        geometry = row['geometry']
+        if geometry is not None:
+            geometry = json.loads(geometry)
+            id = row['gmlid']
+            if geometry['type'] == "Polygon":
+                for array in geometry['coordinates']:
+                    for point in array:
+                        vertices.append(tuple(point))
+                # delete the repeating coordinates
+                vertices.pop(len(vertices)-1)
+                # append vertices tuple in faces
+                for i in range(int(len(vertices))):
+                    face.append(i)
+                faces.append(tuple(face))
         # generate object in blender
         new_mesh = bpy.data.meshes.new(id)
         new_mesh.from_pydata(vertices, edges, faces)
