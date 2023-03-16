@@ -57,11 +57,11 @@ def insertIntoTable(con, gmlid, wkt):
 
 def exportToDatabase(con):
     for obj in bpy.context.scene.objects:
-    gmlid = obj.name
-    coords = [v.co for v in obj.data.vertices]
-    plain_v = [v.to_tuple() for v in coords]
-    wkt = "Polygon Z ((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + ","  + " ".join(str(i) for i in list(plain_v[0])) + "))"
-    insertIntoTable(con, gmlid, wkt)
+      gmlid = obj.name
+      coords = [v.co for v in obj.data.vertices]
+      plain_v = [v.to_tuple() for v in coords]
+      wkt = "Polygon Z ((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + ","  + " ".join(str(i) for i in list(plain_v[0])) + "))"
+      insertIntoTable(con, gmlid, wkt)
     return 0
 
 def geojsonParser(rows):
