@@ -89,6 +89,17 @@ def geojsonParser(rows):
                 for i in range(int(len(vertices))):
                     face.append(i)
                 faces.append(tuple(face))
+            if geometry['type'] == "MultiPolygon":
+                for array in geometry['coordinates']:
+                    for a in array:
+                        for point in a:
+                            vertices.append(tuple(point))
+                # delete the repeating coordinates
+                vertices.append(tuple(point))
+                # append vertices tuple in faces
+                for i in range(int(len(vertices))):
+                    face.append(i)
+                faces.append(tuple(face))                
         # generate object in blender
         new_mesh = bpy.data.meshes.new(id)
         new_mesh.from_pydata(vertices, edges, faces)
@@ -188,7 +199,7 @@ class MyProperties(PropertyGroup):
     sql: StringProperty(
         name = "SQL",
         description = "SQL",
-        default = "SELECT gmlid, ST_ASGeoJSON(envelope) AS geometry FROM cityobject;",
+        default = "SELECT co_ts.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co_ts ON ( co_ts.id = ts.id ) INNER JOIN citydb.surface_geometry AS sg ON ( ts.lod2_multi_surface_id= sg.root_id ) GROUP BY co_ts.gmlid;",
         maxlen = 1024,
         )
 # ------------------------------------------------------------------------
