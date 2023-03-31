@@ -42,14 +42,14 @@ def createTable(con):
         cursor.execute("CREATE TABLE IF NOT EXISTS blender_export ("
                        "id SERIAL PRIMARY KEY,"
                        "gmlid VARCHAR(128) NOT NULL,"
-                       "envelope geometry(PolygonZ,25833) NOT NULL"
+                       "geometry geometry(MultiPolygonZ,25833) NOT NULL"
                        ");")
         con.commit()
     return 0
 
 def insertIntoTable(con, gmlid, wkt):
     with con.cursor() as cursor:
-        cursor.execute("INSERT INTO blender_export (gmlid, envelope) "
+        cursor.execute("INSERT INTO blender_export (gmlid, geometry) "
                        "VALUES ('{}',ST_GeomFromText('{}'))".format(gmlid, wkt)
                        )
         con.commit()
@@ -63,10 +63,27 @@ def exportToDatabase(con):
         # coordinate arrays to tuples
         plain_v = [v.to_tuple() for v in coords]
         # coordinate tuples to WKT
-        wkt = "Polygon Z ((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + ","  + " ".join(str(i) for i in list(plain_v[0])) + "))"
+        wkt = "MultiPolygon Z (((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + ","  + " ".join(str(i) for i in list(plain_v[0])) + ")))"
         insertIntoTable(con, gmlid, wkt)
     return 0
 
+def mergeSurface(context):
+    name = []
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj in bpy.context.scene.objects:
+        if obj.name[:21] not in name:
+            name.append(obj.name[:21])
+    for id in name:
+        objs = []
+        for obj in bpy.context.scene.objects:
+            if obj.name.startswith(id):
+                obj.name = id
+                obj.select_set(True)
+                bpy.context.view_layer.objects.active = obj
+            else:
+                obj.select_set(False)
+        bpy.ops.object.join()
+        
 def geojsonParser(rows):
     """Convert GeoJSON coordinates to Blender Objects"""
     # convert geojson of one row to dictionary
@@ -90,9 +107,9 @@ def geojsonParser(rows):
                     face.append(i)
                 faces.append(tuple(face))
             if geometry['type'] == "MultiPolygon":
-                for array in geometry['coordinates']:
-                    for a in array:
-                        for point in a:
+                for arrays in geometry['coordinates']:
+                    for array in arrays:
+                        for point in array:
                             vertices.append(tuple(point))
                 # delete the repeating coordinates
                 vertices.append(tuple(point))
@@ -165,7 +182,14 @@ class DatabaseExporter(Operator):
         createTable(con)
         exportToDatabase(con)
         con.close()
-        return {'FINISHED'} 
+        return {'FINISHED'}
+class MergeSurface(Operator):
+    """Merge surface geometry to buildings"""
+    bl_idname = "surface.merge"
+    bl_label = "Merge surfaces to buildings"
+    
+    def execute(self,context):
+        mergeSurface(context)
 
 # ------------------------------------------------------------------------
 #    Scene Properties
@@ -199,7 +223,7 @@ class MyProperties(PropertyGroup):
     sql: StringProperty(
         name = "SQL",
         description = "SQL",
-        default = "SELECT co_ts.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co_ts ON ( co_ts.id = ts.id ) INNER JOIN citydb.surface_geometry AS sg ON ( ts.lod2_multi_surface_id= sg.root_id ) GROUP BY co_ts.gmlid;",
+        default = "SELECT ts.id AS roof_id, co_ts.gmlid AS roof_gmlid, b.id AS building_id, co.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co_ts ON (co_ts.id = ts.id) INNER JOIN citydb.surface_geometry AS sg ON (ts.lod2_multi_surface_id = sg.root_id) INNER JOIN citydb . building AS b ON ( b.id = ts.building_id ) INNER JOIN citydb . cityobject AS co ON (co.id = b.id) GROUP BY ts.id, co_ts.gmlid, b.id, co.gmlid ORDER BY b.id, ts.id;",
         maxlen = 1024,
         )
 # ------------------------------------------------------------------------
@@ -225,6 +249,7 @@ class Database_PT_Connect_Panel(Panel):
         layout.separator()
         layout.operator(DatabaseConnector.bl_idname)
         layout.operator(DatabaseExporter.bl_idname)
+        layout.operator(MergeSurface.bl_idname)
         layout.operator(ClearInformation.bl_idname)
 # ------------------------------------------------------------------------
 #    Registration
@@ -235,6 +260,7 @@ classes = (
     DatabaseConnector,
     ClearInformation,
     DatabaseExporter,
+    MergeSurface,
 )
 
 def register():
