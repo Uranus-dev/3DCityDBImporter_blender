@@ -210,19 +210,29 @@ class PopupWindow(Operator):
         return {'FINISHED'}
     
     def invoke(self, context, event):
-        if bpy.context.selected_objects != []:
+        if bpy.context.selected_objects:
             obj = bpy.context.selected_objects
             if "gmlid" in obj[0].keys():
                 self.gmlid = obj[0]['gmlid']
+            else:
+                self.gmlid = None
             if "height" in obj[0].keys():
                 self.height = obj[0]['height'] + " " + "m"
+            else:
+                self.height = None
+        else:
+            self.gmlid = None
+            self.height = None
         return context.window_manager.invoke_props_dialog(self)
     
     def draw(self, context):
-        self.layout.label(text=self.name_label)
-        self.layout.label(text=self.gmlid)
-        self.layout.label(text=self.height_label)
-        self.layout.label(text=self.height)
+        layout = self.layout
+        row = layout.row()
+        row.label(text=self.name_label)
+        row.label(text=self.gmlid)
+        row = layout.row()
+        row.label(text=self.height_label)
+        row.label(text=self.height)
 # ------------------------------------------------------------------------
 #    Scene Properties
 # ------------------------------------------------------------------------
