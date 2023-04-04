@@ -57,31 +57,36 @@ def insertIntoTable(con, gmlid, wkt):
 
 def exportToDatabase(con):
     for obj in bpy.context.scene.objects:
-        gmlid = obj['roof_gmlid']
+        gmlid = obj['surface_gmlid']
         # get coordinates of object
         coords = [v.co for v in obj.data.vertices]
         # coordinate arrays to tuples
         plain_v = [v.to_tuple() for v in coords]
         # coordinate tuples to WKT
-        wkt = "MultiPolygon Z (((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + ","  + " ".join(str(i) for i in list(plain_v[0])) + ")))"
+        wkt = ("MultiPolygon Z (((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + 
+        ","  + " ".join(str(i) for i in list(plain_v[0])) + ")))")
         insertIntoTable(con, gmlid, wkt)
     return 0
 
 def mergeSurface(context):
     name = []
+    # deselect all the objects
     bpy.ops.object.select_all(action='DESELECT')
+    # loop to record different gmlid
     for obj in bpy.context.scene.objects:
         if obj.name.split(".")[0] not in name:
             name.append(obj.name.split(".")[0])
+    # merge surfaces of each building by gmlid
     for id in name:
-        objs = []
         for obj in bpy.context.scene.objects:
+            # select the object with the name(gmlid)
             if obj.name.startswith(id):
                 obj.name = id
                 obj.select_set(True)
                 bpy.context.view_layer.objects.active = obj
             else:
                 obj.select_set(False)
+        # merge surfaces
         bpy.ops.object.join()
         
 def geojsonParser(rows):
@@ -93,7 +98,7 @@ def geojsonParser(rows):
         face = []
         faces = []
         geometry = row['geometry']
-        roof_gmlid = row['roof_gmlid']
+        surface_gmlid = row['surface_gmlid']
         height = row['height']
         id = row['gmlid']
         if geometry is not None:
@@ -124,8 +129,9 @@ def geojsonParser(rows):
         new_mesh.from_pydata(vertices, edges, faces)
         new_mesh.update()
         new_object = bpy.data.objects.new(id, new_mesh)
+        # add height, surface_gmlid, gmlid as object properties
         new_object['height'] = str(height)
-        new_object['roof_gmlid'] = roof_gmlid
+        new_object['surface_gmlid'] = surface_gmlid
         new_object['gmlid'] = id
         bpy.context.collection.objects.link(new_object)
 
@@ -211,7 +217,9 @@ class PopupWindow(Operator):
     
     def invoke(self, context, event):
         if bpy.context.selected_objects:
+            # get the set of selected objects
             obj = bpy.context.selected_objects
+            # read object gmlid and height properties
             if "gmlid" in obj[0].keys():
                 self.gmlid = obj[0]['gmlid']
             else:
@@ -228,6 +236,7 @@ class PopupWindow(Operator):
     def draw(self, context):
         layout = self.layout
         row = layout.row()
+        # print the properties in the layout of popup window
         row.label(text=self.name_label)
         row.label(text=self.gmlid)
         row = layout.row()
@@ -265,7 +274,13 @@ class MyProperties(PropertyGroup):
     sql: StringProperty(
         name = "SQL",
         description = "SQL",
-        default = "SELECT ts.id AS roof_id, co_ts.gmlid AS roof_gmlid, b.measured_height AS height, co.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co_ts ON (co_ts.id = ts.id) INNER JOIN citydb.surface_geometry AS sg ON (ts.lod2_multi_surface_id = sg.root_id) INNER JOIN citydb . building AS b ON ( b.id = ts.building_id ) INNER JOIN citydb . cityobject AS co ON (co.id = b.id) GROUP BY ts.id, co_ts.gmlid, b.id, co.gmlid ORDER BY b.id, ts.id;",
+        default = """SELECT ts.id AS roof_id, co_ts.gmlid AS surface_gmlid, b.measured_height AS height, 
+        co.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry 
+        FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co_ts 
+        ON (co_ts.id = ts.id) INNER JOIN citydb.surface_geometry AS sg 
+        ON (ts.lod2_multi_surface_id = sg.root_id) INNER JOIN citydb . building AS b 
+        ON ( b.id = ts.building_id ) INNER JOIN citydb . cityobject AS co ON (co.id = b.id) 
+        GROUP BY ts.id, co_ts.gmlid, b.id, co.gmlid ORDER BY b.id, ts.id;""",
         maxlen = 1024,
         )
         
@@ -290,6 +305,7 @@ class Database_PT_Connect_Panel(Panel):
         layout.prop(mytool, "password")
         layout.prop(mytool, "sql")
         layout.separator()
+        
         layout.operator(DatabaseConnector.bl_idname)
         layout.operator(DatabaseExporter.bl_idname)
         layout.operator(MergeSurface.bl_idname)
