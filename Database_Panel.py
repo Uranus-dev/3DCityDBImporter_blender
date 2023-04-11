@@ -1,3 +1,14 @@
+bl_info = {
+    "name": "3DCityDB Importer/Exporter",
+    "author": "Uranus-dev",
+    "version": (1, 0),
+    "blender": (2, 80, 0),
+    "location": "File > Import > 3DCityDB",
+    "description": "Visualize 3D City Database data in Blender",
+    "warning": "",
+    "wiki_url": "",
+    "category": "Import-Export",
+}
 import bpy
 from bpy.props import (StringProperty,
                        PointerProperty,
@@ -55,8 +66,8 @@ def insertIntoTable(con, gmlid, wkt):
         con.commit()
     return 0
 
-def exportToDatabase(con):
-    for obj in bpy.context.scene.objects:
+def exportToDatabase(con, context):
+    for obj in context.scene.objects:
         gmlid = obj['surface_gmlid']
         # get coordinates of object
         coords = [v.co for v in obj.data.vertices]
@@ -73,23 +84,23 @@ def mergeSurface(context):
     # deselect all the objects
     bpy.ops.object.select_all(action='DESELECT')
     # loop to record different gmlid
-    for obj in bpy.context.scene.objects:
+    for obj in context.scene.objects:
         if obj.name.split(".")[0] not in name:
             name.append(obj.name.split(".")[0])
     # merge surfaces of each building by gmlid
     for id in name:
-        for obj in bpy.context.scene.objects:
+        for obj in context.scene.objects:
             # select the object with the name(gmlid)
             if obj.name.startswith(id):
                 obj.name = id
                 obj.select_set(True)
-                bpy.context.view_layer.objects.active = obj
+                context.view_layer.objects.active = obj
             else:
                 obj.select_set(False)
         # merge surfaces
         bpy.ops.object.join()
         
-def geojsonParser(rows):
+def geojsonParser(rows, context):
     """Convert GeoJSON coordinates to Blender Objects"""
     # convert geojson of one row to dictionary
     for row in rows:
@@ -133,7 +144,7 @@ def geojsonParser(rows):
         new_object['height'] = str(height)
         new_object['surface_gmlid'] = surface_gmlid
         new_object['gmlid'] = id
-        bpy.context.collection.objects.link(new_object)
+        context.collection.objects.link(new_object)
 
 # ------------------------------------------------------------------------
 #    Operator
@@ -144,18 +155,19 @@ class DatabaseConnector(Operator):
     bl_label = "Database Connect"
     
     def execute(self, context):
+        # clear all objects in blender before adding database data
         clearAll()
         
-        db_host = bpy.data.scenes['Scene'].my_tool.host
-        db_name = bpy.data.scenes['Scene'].my_tool.name
-        db_user = bpy.data.scenes['Scene'].my_tool.user
-        db_password = bpy.data.scenes['Scene'].my_tool.password
-        sql = bpy.data.scenes['Scene'].my_tool.sql
+        db_host = bpy.data.scenes['Scene'].MyProperties.host
+        db_name = bpy.data.scenes['Scene'].MyProperties.name
+        db_user = bpy.data.scenes['Scene'].MyProperties.user
+        db_password = bpy.data.scenes['Scene'].MyProperties.password
+        sql = bpy.data.scenes['Scene'].MyProperties.sql
         
         if db_host != "" and db_name != "" and db_user != "" and db_password != "" and sql != "":
             rows = connectDatabase(db_host, db_name, db_user, db_password, sql)
             # convert GeoJSON data to blender objects
-            geojsonParser(rows)
+            geojsonParser(rows,context)
         else:
             ctypes.windll.user32.MessageBoxW(0, "Please enter all database Information!", "Warning", 1)
 
@@ -167,11 +179,11 @@ class ClearInformation(Operator):
     bl_label = "Clear All DB Info"
     
     def execute(self, context):
-        bpy.data.scenes['Scene'].my_tool.host = ""
-        bpy.data.scenes['Scene'].my_tool.name = ""
-        bpy.data.scenes['Scene'].my_tool.user = ""
-        bpy.data.scenes['Scene'].my_tool.password = ""
-        bpy.data.scenes['Scene'].my_tool.sql = ""
+        bpy.data.scenes['Scene'].MyProperties.host = ""
+        bpy.data.scenes['Scene'].MyProperties.name = ""
+        bpy.data.scenes['Scene'].MyProperties.user = ""
+        bpy.data.scenes['Scene'].MyProperties.password = ""
+        bpy.data.scenes['Scene'].MyProperties.sql = ""
         return {'FINISHED'}
     
 class DatabaseExporter(Operator):
@@ -180,10 +192,10 @@ class DatabaseExporter(Operator):
     bl_label = "Export to Database"
     
     def execute(self, context):
-        db_host = bpy.data.scenes['Scene'].my_tool.host
-        db_name = bpy.data.scenes['Scene'].my_tool.name
-        db_user = bpy.data.scenes['Scene'].my_tool.user
-        db_password = bpy.data.scenes['Scene'].my_tool.password
+        db_host = bpy.data.scenes['Scene'].MyProperties.host
+        db_name = bpy.data.scenes['Scene'].MyProperties.name
+        db_user = bpy.data.scenes['Scene'].MyProperties.user
+        db_password = bpy.data.scenes['Scene'].MyProperties.password
         con = psycopg2.connect(
         host=db_host,
         database=db_name,
@@ -191,7 +203,7 @@ class DatabaseExporter(Operator):
         password=db_password
         )
         createTable(con)
-        exportToDatabase(con)
+        exportToDatabase(con, context)
         con.close()
         return {'FINISHED'}
 
@@ -216,9 +228,9 @@ class PopupWindow(Operator):
         return {'FINISHED'}
     
     def invoke(self, context, event):
-        if bpy.context.selected_objects:
+        if context.selected_objects:
             # get the set of selected objects
-            obj = bpy.context.selected_objects
+            obj = context.selected_objects
             # read object gmlid and height properties
             if "gmlid" in obj[0].keys():
                 self.gmlid = obj[0]['gmlid']
@@ -296,14 +308,13 @@ class Database_PT_Connect_Panel(Panel):
 
     def draw(self, context):
         layout = self.layout
-        scene = context.scene
-        mytool = scene.my_tool
+        props = context.scene.MyProperties
 
-        layout.prop(mytool, "host")
-        layout.prop(mytool, "name")
-        layout.prop(mytool, "user")
-        layout.prop(mytool, "password")
-        layout.prop(mytool, "sql")
+        layout.prop(props, "host")
+        layout.prop(props, "name")
+        layout.prop(props, "user")
+        layout.prop(props, "password")
+        layout.prop(props, "sql")
         layout.separator()
         
         layout.operator(DatabaseConnector.bl_idname)
@@ -328,12 +339,12 @@ classes = (
 def register():
     for cls in classes:
         register_class(cls)
-    bpy.types.Scene.my_tool = PointerProperty(type=MyProperties)
-
+    bpy.types.Scene.MyProperties = PointerProperty(type=MyProperties)
+    
 def unregister():
     for cls in reversed(classes):
         unregister_class(cls)
-    del bpy.types.Scene.my_tool
-
+    del bpy.types.Scene.MyProperties
+    
 if __name__ == "__main__":
     register()
