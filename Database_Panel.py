@@ -1,6 +1,6 @@
 bl_info = {
     "name": "3DCityDB Importer/Exporter",
-    "author": "Uranus-dev",
+    "author": "Xingyue Wang",
     "version": (1, 0),
     "blender": (2, 80, 0),
     "location": "File > Import > 3DCityDB",
@@ -21,6 +21,7 @@ from bpy.utils import (register_class,
                        unregister_class
                        )
 import ctypes
+from datetime import datetime
 import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -52,31 +53,39 @@ def createTable(con):
     with con.cursor() as cursor:
         cursor.execute("CREATE TABLE IF NOT EXISTS blender_export ("
                        "id SERIAL PRIMARY KEY,"
+                       "building_id integer NOT NULL,"
                        "gmlid VARCHAR(128) NOT NULL,"
-                       "geometry geometry(MultiPolygonZ,25833) NOT NULL"
+                       "year_of_construction date,"
+                       "year_of_demolition date,"
+                       "geometry geometry(MultiPolygonZ,25833) NOT NULL,"
+                       "CONSTRAINT export_building_fk FOREIGN KEY (building_id) REFERENCES citydb.building (id)"
                        ");")
         con.commit()
     return 0
 
-def insertIntoTable(con, gmlid, wkt):
+def insertIntoTable(con, building_id, gmlid, year_of_construction, year_of_demolition, wkt):
     with con.cursor() as cursor:
-        cursor.execute("INSERT INTO blender_export (gmlid, geometry) "
-                       "VALUES ('{}',ST_GeomFromText('{}'))".format(gmlid, wkt)
+        cursor.execute("INSERT INTO blender_export (building_id,gmlid,year_of_construction,year_of_demolition,geometry) "
+                       "VALUES ('{}','{}',to_date('{}','YYYY-MM-DD'),to_date('{}','YYYY-MM-DD'),ST_GeomFromText('{}'))".format(building_id,gmlid,year_of_construction,year_of_demolition,wkt)
                        )
         con.commit()
     return 0
 
 def exportToDatabase(con, context):
     for obj in context.scene.objects:
-        gmlid = obj['surface_gmlid']
-        # get coordinates of object
-        coords = [v.co for v in obj.data.vertices]
-        # coordinate arrays to tuples
-        plain_v = [v.to_tuple() for v in coords]
-        # coordinate tuples to WKT
-        wkt = ("MultiPolygon Z (((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + 
-        ","  + " ".join(str(i) for i in list(plain_v[0])) + ")))")
-        insertIntoTable(con, gmlid, wkt)
+        if obj.type == "MESH":
+            building_id = obj['building_id']
+            gmlid = obj['surface_gmlid']
+            year_of_construction = obj['year_of_construction']
+            year_of_demolition = obj['year_of_demolition']
+            # get coordinates of object
+            coords = [v.co for v in obj.data.vertices]
+            # coordinate arrays to tuples
+            plain_v = [v.to_tuple() for v in coords]
+            # coordinate tuples to WKT
+            wkt = ("MultiPolygon Z (((" + ",".join(" ".join(str(i) for i in tuple) for tuple in plain_v) + 
+            ","  + " ".join(str(i) for i in list(plain_v[0])) + ")))")
+            insertIntoTable(con, building_id, gmlid, year_of_construction, year_of_demolition, wkt)
     return 0
 
 def mergeSurface(context):
@@ -110,6 +119,9 @@ def geojsonParser(rows, context):
         faces = []
         geometry = row['geometry']
         surface_gmlid = row['surface_gmlid']
+        building_id = row['building_id']
+        year_of_construction = row['year_of_construction']
+        year_of_demolition = row['year_of_demolition']
         height = row['height']
         id = row['gmlid']
         if geometry is not None:
@@ -144,6 +156,9 @@ def geojsonParser(rows, context):
         new_object['height'] = str(height)
         new_object['surface_gmlid'] = surface_gmlid
         new_object['gmlid'] = id
+        new_object['building_id'] = building_id
+        new_object['year_of_construction'] = str(year_of_construction)
+        new_object['year_of_demolition'] = str(year_of_demolition)
         context.collection.objects.link(new_object)
 
 # ------------------------------------------------------------------------
@@ -223,7 +238,8 @@ class PopupWindow(Operator):
     
     name_label = "Name:"
     height_label = "Height:"
-
+    construction_label = "Year of Construction"
+    demolition_label = "Year of Demolition"
     def execute(self, context):
         return {'FINISHED'}
     
@@ -232,14 +248,16 @@ class PopupWindow(Operator):
             # get the set of selected objects
             obj = context.selected_objects
             # read object gmlid and height properties
-            if "gmlid" in obj[0].keys():
+            if "gmlid" in obj[0].keys() and "height" in obj[0].keys() and "year_of_construction" in obj[0].keys() and "year_of_demolition" in obj[0].keys():
                 self.gmlid = obj[0]['gmlid']
+                self.height = obj[0]['height'] + " " + "m"
+                self.year_of_construction = obj[0]['year_of_construction']
+                self.year_of_demolition = obj[0]['year_of_demolition']
             else:
                 self.gmlid = None
-            if "height" in obj[0].keys():
-                self.height = obj[0]['height'] + " " + "m"
-            else:
                 self.height = None
+                self.year_of_construction = None
+                self.year_of_demolition = None
         else:
             self.gmlid = None
             self.height = None
@@ -254,6 +272,12 @@ class PopupWindow(Operator):
         row = layout.row()
         row.label(text=self.height_label)
         row.label(text=self.height)
+        row = layout.row()
+        row.label(text=self.construction_label)
+        row.label(text=self.year_of_construction)
+        row = layout.row()
+        row.label(text=self.demolition_label)
+        row.label(text=self.year_of_demolition)
 # ------------------------------------------------------------------------
 #    Scene Properties
 # ------------------------------------------------------------------------
@@ -280,19 +304,20 @@ class MyProperties(PropertyGroup):
     password: StringProperty(
         name = "Password",
         description = "Database Password",
+        subtype = "PASSWORD"
         default = "123456",
         maxlen = 1024,
         )
     sql: StringProperty(
         name = "SQL",
         description = "SQL",
-        default = """SELECT ts.id AS roof_id, co_ts.gmlid AS surface_gmlid, b.measured_height AS height, 
-        co.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry 
-        FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co_ts 
-        ON (co_ts.id = ts.id) INNER JOIN citydb.surface_geometry AS sg 
+        default = """SELECT b.id AS building_id, co.gmlid AS surface_gmlid, b.measured_height AS height, 
+        co.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry,
+        b.year_of_construction AS year_of_construction, b.year_of_demolition AS year_of_demolition
+        FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co 
+        ON (co.id = ts.id) INNER JOIN citydb.surface_geometry AS sg 
         ON (ts.lod2_multi_surface_id = sg.root_id) INNER JOIN citydb . building AS b 
-        ON ( b.id = ts.building_id ) INNER JOIN citydb . cityobject AS co ON (co.id = b.id) 
-        GROUP BY ts.id, co_ts.gmlid, b.id, co.gmlid ORDER BY b.id, ts.id;""",
+        ON ( b.id = ts.building_id ) GROUP BY ts.id, b.id, co.gmlid ORDER BY b.id, ts.id;""",
         maxlen = 1024,
         )
         
