@@ -311,13 +311,14 @@ class MyProperties(PropertyGroup):
     sql: StringProperty(
         name = "SQL",
         description = "SQL",
-        default = """SELECT b.id AS building_id, co.gmlid AS surface_gmlid, b.measured_height AS height, 
+        default = """SELECT b.id AS building_id, co_ts.gmlid AS surface_gmlid, b.measured_height AS height, 
         co.gmlid AS gmlid, ST_Asgeojson(ST_Collect(sg.geometry)) AS geometry,
         b.year_of_construction AS year_of_construction, b.year_of_demolition AS year_of_demolition
-        FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co 
-        ON (co.id = ts.id) INNER JOIN citydb.surface_geometry AS sg 
-        ON (ts.lod2_multi_surface_id = sg.root_id) INNER JOIN citydb . building AS b 
-        ON ( b.id = ts.building_id ) GROUP BY ts.id, b.id, co.gmlid ORDER BY b.id, ts.id;""",
+        FROM citydb.thematic_surface AS ts INNER JOIN citydb.cityobject AS co_ts 
+        ON (co_ts.id = ts.id) INNER JOIN citydb.surface_geometry AS sg 
+        ON (ts.lod2_multi_surface_id = sg.root_id) INNER JOIN citydb.building AS b ON ( b.id = ts.building_id )
+        INNER JOIN citydb.cityobject as co ON (co.id = b.id)       
+        GROUP BY ts.id, b.id, co_ts.gmlid, co.gmlid ORDER BY b.id, ts.id;""",
         maxlen = 1024,
         )
         
