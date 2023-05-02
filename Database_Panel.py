@@ -133,13 +133,27 @@ def geojsonParser(rows, context):
         edges = []
         face = []
         faces = []
-        geometry = row["geometry"]
-#        surface_gmlid = row["surface_gmlid"]
-        building_id = row["building_id"]
-        year_of_construction = row["year_of_construction"]
-        year_of_demolition = row["year_of_demolition"]
-        height = row["height"]
-        id = row["gmlid"]
+#        geometry = None
+#        surface_gmlid = None
+#        building_id = None
+#        year_of_construction = None
+#        year_of_demolition = None
+#        height = None
+#        id = None
+        if "geometry" in row:
+            geometry = row["geometry"]
+#        if "surface_gmlid" in row:
+#            surface_gmlid = row["surface_gmlid"]
+        if "building_id" in row:
+            building_id = row["building_id"]
+        if "year_of_construction" in row:
+            year_of_construction = row["year_of_construction"]
+        if "year_of_demolition" in row:
+            year_of_demolition = row["year_of_demolition"]
+        if "height" in row:
+            height = row["height"]
+        if "gmlid" in row:
+            id = row["gmlid"]
         if geometry is not None:
             geometry = json.loads(geometry)
             if geometry["type"] == "Polygon":
