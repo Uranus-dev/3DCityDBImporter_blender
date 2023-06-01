@@ -332,6 +332,7 @@ class MyProperties(PropertyGroup):
     password: StringProperty(
         name = "Password",
         description = "Database Password",
+        subtype = "PASSWORD",
         default = "123456",
         maxlen = 1024,
         )
@@ -348,7 +349,7 @@ class MyProperties(PropertyGroup):
         GROUP BY ts.id, b.id, co_ts.gmlid, co.gmlid ORDER BY b.id, ts.id;""",
         maxlen = 1024,
         )
-#        select building_id, gmlid, height, year_of_construction, year_of_demolition, ST_asgeojson(geometry) as geometry from blender_export;
+#select building_id, gmlid, height, year_of_construction, year_of_demolition, ST_asgeojson(geometry) as geometry from blender_export;
     gmlid: StringProperty(
         name = "gmlid",
         description = "GMLID",
