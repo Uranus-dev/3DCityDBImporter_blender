@@ -3,7 +3,7 @@ bl_info = {
     "author": "Xingyue Wang",
     "version": (1, 0),
     "blender": (2, 80, 0),
-    "location": "File > Import > 3DCityDB",
+    "location": "View3D",
     "description": "Visualise 3D City Database data in Blender",
     "warning": "",
     "wiki_url": "",

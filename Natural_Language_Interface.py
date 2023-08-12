@@ -1,3 +1,14 @@
+bl_info = {
+    "name": "Natural Language Interface",
+    "author": "Xingyue Wang",
+    "version": (1, 0),
+    "blender": (2, 80, 0),
+    "location": "View3D",
+    "description": "Query via Natural language",
+    "warning": "",
+    "wiki_url": "",
+    "category": "3D View",
+}
 #import sys
 import numpy as np
 from mathutils import Vector
