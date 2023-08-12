@@ -34,4 +34,4 @@ After the installation of NLTK, some other packages should be downloaded.
 import nltk
 nltk.download('all')
 ```
-Once you have done these you can use these two plugins.
+If you want to use these two plugins after running those statements, you should package these two \*.py files into zip files separately, and then open Blender, click Edit->Preferences->Addons->Install to install these plugins.
